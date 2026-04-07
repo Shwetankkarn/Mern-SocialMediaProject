@@ -49,9 +49,9 @@ IUserMethods
     refreshToken: {
       type: String,
     },
-    // bio: {
-    //     type: String,
-    // },
+    bio: {
+        type: String,
+    },
   },
   {
     timestamps: true,

@@ -35,3 +35,23 @@ export const uploadToCloudinary = async (localFilePath: string) => {
     return null;
   }
 };
+
+export const removeFromCloudinary = async (imageUrl: string) => {
+  try {
+    if (!imageUrl) throw new Error("Image URL required");
+
+    const urlArray = imageUrl.split("/");
+    const imageNameWithExtension: string = urlArray[urlArray.length - 1]!;
+
+    const imageName = imageNameWithExtension.split(".")[0];
+
+    if (!imageName) {
+      throw new Error("Invalid public_id");
+    }
+
+    await cloudinary.uploader.destroy(imageName);
+
+  } catch (error) {
+    console.log("Cloudinary Error: ", error);
+  }
+};

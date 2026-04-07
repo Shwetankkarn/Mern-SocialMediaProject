@@ -1,9 +1,14 @@
 import { Request } from "express";
+import mongoose from "mongoose";
 import { Response } from "express";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
-import { uploadToCloudinary } from "../utils/cloudinary";
+import { removeFromCloudinary, uploadToCloudinary } from "../utils/cloudinary";
 import { User } from "../models/user.model.js";
+import jwt from "jsonwebtoken";
+import { AccessTokenPayload } from "../types";
+import fs from "fs";
+import { upload } from "../middlewares/multer.middleware";
 
 export const registerUser = async(req: Request, res: Response) => {
     try{
@@ -225,3 +230,365 @@ if (!userId) {
     });
   }
 };
+
+export const getCurrentUser = async(req: Request, res: Response) =>{
+  try{
+    const user= req.user;
+    return res.status(200)
+    .json(new ApiResponse (200, user, "current user fetched successfully"));
+  } catch(error:unknown){
+    console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+  }
+};
+
+export const refreshAccessToken = async(req: Request, res: Response) => {
+  try{
+    const incomingRefreshToken =
+    req.cookies?.refreshToken ||
+    req.header("Authorization")?.replace("Bearer", "");
+
+    if(!incomingRefreshToken){
+      throw new ApiError(401, "unauthorized request");
+    }
+
+    const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET!) as AccessTokenPayload;
+    const userId = decodedToken?._id;
+
+    const user= await User.findById(userId);
+    if(!user){
+      throw new ApiError(401, "Invalid access token");
+    }
+
+    if(incomingRefreshToken!= user?.refreshToken){
+      throw new ApiError(401, "refreshToken invalid or expired");
+    }
+    const newRefreshToken =  user.generateRefreshToken();
+    const newAccessToken = user.generateAccessToken();
+
+    user.refreshToken = newRefreshToken;
+    user.save({validateBeforeSave: false});
+
+    const cookieOptions ={
+      httpOnly: true,
+      secure: true,
+    };
+
+    return res.status(201)
+    .cookie("refreshToken", newRefreshToken, cookieOptions)
+    .cookie("accessToken", newAccessToken, cookieOptions)
+    .json(new ApiResponse(201, {
+      refreshToken: newRefreshToken,
+      accessToken: newAccessToken,
+    },
+    "refresh token successfuly generated "
+  )
+  );
+  }
+    catch(error:unknown){
+      console.error("Error: ", error );
+
+      if(error instanceof ApiError){
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+          errors: error.errors,
+
+        });
+      }
+      return res.status(500).json({
+      success: false,
+     message: "Internal Server Error",
+      errors: [],
+  });
+    }
+  }
+
+  export const changeCurrentPassword = async(req: Request, res: Response) =>{
+    try{
+        const {oldPassword, newPassword, confirmNewPassword} = req.body;
+
+        if(newPassword!=confirmNewPassword){
+          throw new ApiError(400, "new password and confirm password do not match");
+        }
+        const userId= req.user?._id;
+        const user= await User.findById(userId);
+
+        if(!user){
+          throw new ApiError(401, "unauthorized request");
+        }
+
+        const isOldPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+        if(!isOldPasswordCorrect){
+          throw new ApiError(401, "Your old password is not correct");
+        }
+          user.password = newPassword;
+          await user.save({ validateBeforeSave: false });
+
+          return res.status(200).json(
+  new ApiResponse(200, null, "Password changed successfully")
+);
+    }
+    catch(error:unknown){
+ console.error("Error: ", error );
+
+      if(error instanceof ApiError){
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+          errors: error.errors,
+
+        });
+      }
+      return res.status(500).json({
+      success: false,
+     message: "Internal Server Error",
+      errors: [],
+  });
+    }
+  }
+export const addBio = async(req:Request, res: Response) =>{
+  try{
+      const {bio} = req.body;
+
+      if(!bio || bio===""){
+        throw new ApiError(400, "Bio Cannot Be Empty");
+      }
+
+      const userId = req.user?._id;
+      const user = await User.findById(userId);
+
+      if(!user){
+        throw new ApiError(401, "user not found");
+      }
+      user.bio = bio.trim();
+      user.save({validateBeforeSave: false});
+       return res.status(200).json(
+  new ApiResponse(200, null, "Bio created successfully")
+  )}
+  catch (error:unknown){
+ console.error("Error: ", error );
+
+      if(error instanceof ApiError){
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+          errors: error.errors,
+
+        });
+      }
+      return res.status(500).json({
+      success: false,
+     message: "Internal Server Error",
+      errors: [],
+  });
+  }
+}
+export const updateBio = async (req: Request, res: Response) => {
+  try {
+    const { updatedBio } = req.body;
+    if (!updatedBio || updatedBio === "") {
+      throw new ApiError(400, "updated bio cannot be empty");
+    }
+    const userId = req.user?._id;
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: { bio: updatedBio },
+      },
+      {
+        new: true,
+      }
+    );
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "bio updated successfull"));
+  } catch (error: unknown) {
+    console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+  }
+};
+
+export const updateProfileImage = async (req: Request, res:Response) =>{
+try{
+  let profileImagePath = req.file?.path;
+  if(!profileImagePath){
+    throw new ApiError(400,"profile Image is required")
+  }
+
+  const userId= req.user?._id;
+  if(!userId){
+    fs.unlinkSync(profileImagePath);
+    throw new ApiError(500, "no user id found");
+  }
+
+  const user= await User.findById(userId);
+  if(!user){
+   fs.unlinkSync(profileImagePath);
+   throw new ApiError(404, "user not found");
+  }
+
+  if(!user.profileImage){
+    const profileImage = await uploadToCloudinary(profileImagePath);
+    user.profileImage = profileImage?.url;
+    user.save({ validateBeforeSave: false })
+     return res.status(200).json(new ApiResponse(200, null, "profile-image added successfully"));
+  }
+  else{
+    const oldProfileImageUrl = user.profileImage;
+    await removeFromCloudinary(oldProfileImageUrl);
+    const newProfileImage = await uploadToCloudinary(profileImagePath);
+    user.profileImage= newProfileImage?.url;
+    user.save({ validateBeforeSave: false });
+    return res.status(201).json(new ApiResponse(200, null, "profile-image updated successfully"));
+  }
+}
+catch(error) {
+   console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+}
+};
+
+export const getUserProfileData = async(req: Request, res: Response) => {
+
+try{
+
+  const { username }= req.params
+
+  if(!username){
+    throw new ApiError(404, "user id not found");
+  }
+
+  const profileData = await User.aggregate([
+    {
+
+      $match: {
+        username: username,
+      },
+    },
+    {
+      $lookup: {
+        from: 'posts',
+        localField: "_id",
+        foreignField: "owner",
+        as: "posts",
+      }
+    },
+
+     {
+    $addFields: {
+      postCount: { $size: "$posts" },
+      followersCount: { $size: "$followers" },   // only if exists
+      followingCount: { $size: "$following" }    // only if exists
+    }
+  },
+
+ {
+        $project: {
+          username: 1,
+          email: 1,
+          bio: 1,
+          profileImage: 1,
+          postCount: 1,
+          followersCount: 1,
+          followingCount: 1,
+          isFollowing: 1,
+        },
+      },
+    
+  ]);
+
+  if(!profileData.length) {
+    throw new ApiError(400, "user not found");
+  }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, profileData[0], "user data fetched successfully")
+      );
+}
+
+catch (error: unknown){
+ console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+}
+
+
+}
+
+export const followUnfollowUser = async(req:Request, res: Response) =>{
+  try{
+
+  }
+  catch (error: unknown){
+console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+  }
+}

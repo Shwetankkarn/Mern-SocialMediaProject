@@ -1,7 +1,7 @@
 import mongoose, { Document, Model, Schema } from "mongoose";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions, Secret, JwtPayload } from "jsonwebtoken";
-import { AccessTokenPayload } from "../types";
+// import { AccessTokenPayload } from "../types";
 
 
 export interface IUser {
@@ -29,3 +29,13 @@ export interface AccessTokenPayload extends JwtPayload{
     user: string,
     email: string
 }
+
+export interface IPost {
+    content: String,
+    image?:  string,
+    owner: mongoose.Types.ObjectId;
+    comments: mongoose.Types.ObjectId;
+
+}
+
+export interface IPostDocument extends Document, IPost {}
