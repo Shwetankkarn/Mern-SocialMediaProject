@@ -570,11 +570,60 @@ catch (error: unknown){
 
 }
 
-export const followUnfollowUser = async(req:Request, res: Response) =>{
+export const followUser = async(req:Request, res: Response) =>{
   try{
+      const {username } = req.params;
+      const loggedInUserId= req.user?._id;
 
-  }
-  catch (error: unknown){
+      if(!loggedInUserId) {
+        throw new ApiError(401, " logged in user not found");
+      }
+
+      const session= await mongoose.startSession();
+      session.startTransaction();
+
+      const userToBeFollowed = await User.findOne({ username }).session(session);
+
+      if(!userToBeFollowed){
+        throw new ApiError(404, "User Not Found");
+      }
+
+      if(userToBeFollowed?._id.equals(loggedInUserId)){
+        throw new ApiError(400, "you cannot follow yourself");
+      }
+
+      await User.findByIdAndUpdate(
+        userToBeFollowed._id,
+        {
+          $addToSet: {
+            followers: loggedInUserId,
+
+          },
+        },
+        { session }
+      );
+
+      await User.findByIdAndUpdate(
+        loggedInUserId,
+      {
+      $addToSet: {
+        following: userToBeFollowed._id,
+      },
+    },
+    { session }
+);
+
+await session.commitTransaction();
+session.endSession();
+
+return res.status(200).json(new ApiResponse (200, 
+  null,
+   `You are following ${userToBeFollowed.username} now`
+
+)
+ );
+
+ } catch (error: unknown){
 console.error("Error: ", error);
 
     if (error instanceof ApiError) {
@@ -590,5 +639,38 @@ console.error("Error: ", error);
       message: "Internal Server Error",
       errors: [],
     });
+  }
+}
+
+export const unfollowUser = async(req: Request, res: Response) => {
+  try{
+
+    const { username }= req.params;
+    const loggedInUserId = req.user?._id;
+
+    if(!loggedInUserId){
+      throw new ApiError(404, "logged user id not found");
+    }
+      const userToUnFollow= await User.findOne({ username });
+      if(!userToUnFollow){
+        throw new ApiError(404, "user not found");
+      }
+
+   if (userToUnFollow._id.equals(loggedInUserId)){
+    throw new ApiError(400, "you cannot unfollow yourself");
+   }
+
+   await User.findByIdAndUpdate(userToUnFollow._id, {
+    $pull: { followers: loggedInUserId }
+   });
+
+   await User.findByIdAndUpdate(loggedInUserId, {
+    $pull: { following: userToUnFollow._id },
+   });
+
+    res.status(200).json(new ApiResponse(200, null, `you unfollowed ${userToUnFollow.username}`));
+  }
+  catch(error: unknown){
+
   }
 }
