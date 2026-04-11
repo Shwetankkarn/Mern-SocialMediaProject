@@ -5,6 +5,7 @@ import { uploadToCloudinary } from "../utils/cloudinary";
 import { User } from "../models/user.model";
 import { Post } from "../models/post.model";
 import { ApiResponse } from "../utils/ApiResponse";
+import mongoose from "mongoose";
 
 export const createPost = async(req: Request, res: Response) => {
 try{
@@ -359,3 +360,101 @@ export const getUserPosts = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const updatePostContent = async (req: Request ,res: Response) =>{
+  try{
+
+    const userId= req.user?._id;
+     const { postId }= req.params;
+     const { content }= req.body;
+
+     if(!content || content === ""){
+       throw new ApiError(400, "content is required and it cannot be empty");
+     }
+
+     if(!userId){
+      throw new ApiError(404, "User not found");
+     }
+
+     if(!postId){
+       throw new ApiError(404, "postid not found");
+     
+     }
+
+     const post= await Post.findById(postId);
+
+     if(!post){
+      throw new ApiError(404, "post not found");
+     }
+
+     if(!post.owner.equals(userId)){
+      throw new ApiError(401, "you are unauthorized to perform the action");
+     }
+
+     post.content = content;
+     post.save ({validateBeforeSave: false})
+
+  return res.status (200).json(new ApiResponse(200, postId, "post updated successfully"));
+  }
+  catch(error: unknown){
+    console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+  }
+}
+
+export const deletePost = async (req:Request, res:Response) =>{
+  try{
+      const { postId } = req.params;
+      const userId= req.user?._id;
+
+      if(!postId){
+        throw new ApiError(404, "post id not found");
+      }
+
+      if(!userId){
+         throw new ApiError(404, "user id not found");
+      }
+
+      const deletedPost = await Post.findByIdAndDelete({
+        _id: postId,
+        owner: userId,
+  });
+  
+
+     if(!deletedPost){
+      throw new ApiError(401, "you are unauthorized to perform the action");
+    }
+
+     return res.status(203).json(new ApiResponse(203, null, "post Deleted successfully"));
+  }
+  catch (error: unknown) {
+ console.error("Error: ", error);
+
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
+  }
+}
