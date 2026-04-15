@@ -2,7 +2,7 @@ import mongoose, { Model } from "mongoose";
 import { timeStamp } from "node:console";
 import { IPostDocument } from "../types";
 
-const PostSchema = new mongoose.Schema(
+const PostSchema = new mongoose.Schema<IPostDocument, Model<IPostDocument>>(
     {
         content: {
             type: String,

@@ -219,7 +219,7 @@ export const getUserPosts = async (req: Request, res: Response) => {
     //     );
     // }
 
-    const posts = await Post.aggregate([
+ const posts = await Post.aggregate([
       //Join owner
       {
         $lookup: {
