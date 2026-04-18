@@ -671,6 +671,20 @@ export const unfollowUser = async(req: Request, res: Response) => {
     res.status(200).json(new ApiResponse(200, null, `you unfollowed ${userToUnFollow.username}`));
   }
   catch(error: unknown){
+console.error("Error: ", error);
 
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      errors: [],
+    });
   }
-}
+  }

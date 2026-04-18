@@ -22,6 +22,12 @@ const PostSchema = new mongoose.Schema<IPostDocument, Model<IPostDocument>>(
                      ref: "Comment",
                 }
             ],
+            likes: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+            }
+        ]
     },
     {
     timestamps: true
