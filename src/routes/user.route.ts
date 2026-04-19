@@ -1,0 +1,35 @@
+import  express from "express";
+import { upload } from "../middlewares/multer.middleware";
+import { registerUser,
+      loginUser,
+     logoutUser,
+     getCurrentUser,
+     refreshAccessToken,
+     changeCurrentPassword,
+     addBio, 
+     updateBio,
+     updateProfileImage,
+     getUserProfileData,
+     followUser,
+     unfollowUser
+} from "../controllers/user.controller";
+import { verifyJWT } from "../middlewares/auth.middleware";
+
+const router = express.Router();
+
+router.route("/register").post(upload.single("profileImage"), registerUser);
+router.route("/login").post(loginUser);
+router.route("/refreshtoken").post(refreshAccessToken);
+
+// secured routes
+router.route("/logout").get(verifyJWT,logoutUser);
+router.route("/current-user").get(verifyJWT, getCurrentUser);
+router.route("/change-password").post(verifyJWT, changeCurrentPassword);
+router.route("/add-bio").post(verifyJWT, addBio);
+router.route("/update-bio").patch(verifyJWT, updateBio);
+router.route("/update-profile-image").patch(verifyJWT,upload.single("profileImage"), updateProfileImage);
+router.route("/get-user-profile-data/:username").get(verifyJWT, getUserProfileData);
+router.route("/follow/:username").post(verifyJWT, followUser);
+router.route("/unfollow/:username").post(verifyJWT, unfollowUser);
+
+export default router;
